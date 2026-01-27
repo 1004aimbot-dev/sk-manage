@@ -107,11 +107,16 @@ const churchMenu: MenuItem[] = [
     },
 ];
 
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Menu } from "lucide-react";
+
+// ... (churchMenu definition remains same)
+
 export function AdminSidebar() {
     const pathname = usePathname();
 
     return (
-        <div className="w-64 h-screen bg-[#1e293b] text-white flex flex-col fixed left-0 top-0 overflow-y-auto z-50">
+        <div className="hidden md:flex w-64 h-screen bg-[#1e293b] text-white flex-col fixed left-0 top-0 overflow-y-auto z-50">
             <div className="p-6 flex items-center gap-2 border-b border-slate-700">
                 <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center font-bold">
                     C
@@ -139,6 +144,40 @@ export function AdminSidebar() {
         </div>
     );
 }
+
+export function MobileSidebar() {
+    const pathname = usePathname();
+    const [open, setOpen] = useState(false);
+
+    return (
+        <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+                <button className="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-md">
+                    <Menu size={24} />
+                </button>
+            </SheetTrigger>
+            <SheetContent side="left" className="p-0 w-[80%] max-w-[300px] bg-[#1e293b] text-white border-r-slate-700">
+                <SheetHeader className="p-6 border-b border-slate-700 text-left">
+                    <SheetTitle className="text-white flex items-center gap-2">
+                        <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center font-bold text-white">
+                            C
+                        </div>
+                        성남신광교회
+                    </SheetTitle>
+                </SheetHeader>
+                <div className="flex-1 py-4 overflow-y-auto h-[calc(100vh-80px)]">
+                    <nav className="space-y-1 px-3">
+                        {churchMenu.map((item) => (
+                            <MenuItem key={item.label} item={item} pathname={pathname} />
+                        ))}
+                    </nav>
+                </div>
+            </SheetContent>
+        </Sheet>
+    );
+}
+
+// ... (MenuItem component remains same)
 
 function MenuItem({
     item,
