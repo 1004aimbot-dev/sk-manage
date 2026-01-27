@@ -23,10 +23,19 @@ export async function getMembers(query?: string) {
 
 // Update member
 export async function updateMember(id: string, data: z.infer<typeof MemberFormSchema>) {
+    console.log(`[updateMember] Request for ID: ${id}`, data);
     try {
-        const birthDate = data.birthDate ? new Date(data.birthDate) : null;
+        let birthDate = null;
+        if (data.birthDate && data.birthDate.trim() !== "") {
+            const dateObj = new Date(data.birthDate);
+            if (!isNaN(dateObj.getTime())) {
+                birthDate = dateObj;
+            } else {
+                console.warn("[updateMember] Invalid birthDate format:", data.birthDate);
+            }
+        }
 
-        await prisma.member.update({
+        const result = await prisma.member.update({
             where: { id },
             data: {
                 ...data,
@@ -34,11 +43,12 @@ export async function updateMember(id: string, data: z.infer<typeof MemberFormSc
             },
         });
 
+        console.log("[updateMember] Success:", result.id);
         revalidatePath("/admin/members");
         return { success: true };
     } catch (error) {
-        console.error(error);
-        return { success: false, error: "Failed to update member" };
+        console.error("[updateMember] Error:", error);
+        return { success: false, error: "Failed to update member: " + String(error) };
     }
 }
 

@@ -34,6 +34,7 @@ interface Committee {
     chair?: string; // 위원장
     director?: string; // 부장
     deputy?: string; // 차장
+    generalManager?: string; // 총무
     accountant?: string; // 회계
     secretary?: string; // 서기
 }
@@ -89,36 +90,71 @@ export function CommitteeManagement({ initialData }: CommitteeManagementProps) {
                     return (
                         <Card
                             key={committee.id}
-                            className="hover:shadow-md transition-shadow cursor-pointer relative group"
+                            className="hover:shadow-md transition-shadow cursor-pointer relative group border-slate-200 shadow-sm"
                             onClick={() => openDialog('edit', committee)}
                         >
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-slate-50/50 border-b border-slate-100 mb-2">
+                                <CardTitle className="text-base font-semibold text-slate-800">
                                     {committee.name}
                                 </CardTitle>
-                                <IconComponent className="h-4 w-4 text-muted-foreground" />
+                                <div className="p-2 bg-white rounded-full shadow-sm">
+                                    <IconComponent className="h-4 w-4 text-blue-600" />
+                                </div>
                             </CardHeader>
-                            <CardContent>
-                                <p className="text-sm text-muted-foreground mt-2 mb-4">
+                            <CardContent className="pt-2">
+                                <p className="text-sm text-slate-500 mb-4 min-h-[40px] line-clamp-2">
                                     {committee.desc}
                                 </p>
 
                                 {/* Leadership Info */}
-                                <div className="text-xs space-y-1 text-slate-600 dark:text-slate-400 border-t pt-3">
-                                    {committee.chair && <div className="flex justify-between"><span>위원장:</span> <span className="font-medium">{committee.chair}</span></div>}
-                                    {committee.director && <div className="flex justify-between"><span>부장:</span> <span className="font-medium">{committee.director}</span></div>}
-                                    {committee.deputy && <div className="flex justify-between"><span>차장:</span> <span className="font-medium">{committee.deputy}</span></div>}
-                                    {committee.accountant && <div className="flex justify-between"><span>회계:</span> <span className="font-medium">{committee.accountant}</span></div>}
-                                    {committee.secretary && <div className="flex justify-between"><span>서기:</span> <span className="font-medium">{committee.secretary}</span></div>}
+                                <div className="bg-slate-50 p-3 rounded-md border border-slate-100">
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                        {committee.chair && (
+                                            <div className="flex justify-between items-center group/item">
+                                                <span className="text-slate-500 text-xs">위원장</span>
+                                                <span className="font-semibold text-slate-900">{committee.chair}</span>
+                                            </div>
+                                        )}
+                                        {committee.director && (
+                                            <div className="flex justify-between items-center group/item">
+                                                <span className="text-slate-500 text-xs">부장</span>
+                                                <span className="font-medium text-slate-800">{committee.director}</span>
+                                            </div>
+                                        )}
+                                        {committee.deputy && (
+                                            <div className="flex justify-between items-center group/item">
+                                                <span className="text-slate-500 text-xs">차장</span>
+                                                <span className="font-medium text-slate-800">{committee.deputy}</span>
+                                            </div>
+                                        )}
+                                        {committee.generalManager && (
+                                            <div className="flex justify-between items-center group/item">
+                                                <span className="text-slate-500 text-xs">총무</span>
+                                                <span className="font-medium text-slate-800">{committee.generalManager}</span>
+                                            </div>
+                                        )}
+                                        {committee.accountant && (
+                                            <div className="flex justify-between items-center group/item">
+                                                <span className="text-slate-500 text-xs">회계</span>
+                                                <span className="font-medium text-slate-800">{committee.accountant}</span>
+                                            </div>
+                                        )}
+                                        {committee.secretary && (
+                                            <div className="flex justify-between items-center group/item">
+                                                <span className="text-slate-500 text-xs">서기</span>
+                                                <span className="font-medium text-slate-800">{committee.secretary}</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Hover Action Buttons */}
-                                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-white dark:bg-slate-950 p-1 rounded-md shadow-sm">
-                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); openDialog('edit', committee); }}>
-                                        <Edit className="w-3 h-3" />
+                                <div className="absolute top-3 right-12 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 bg-white/80 hover:bg-white shadow-sm" onClick={(e) => { e.stopPropagation(); openDialog('edit', committee); }}>
+                                        <Edit className="w-4 h-4 text-blue-600" />
                                     </Button>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:text-red-600" onClick={(e) => handleDelete(committee.id, e)}>
-                                        <Trash2 className="w-3 h-3" />
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 bg-white/80 hover:bg-white shadow-sm text-red-500 hover:text-red-600" onClick={(e) => handleDelete(committee.id, e)}>
+                                        <Trash2 className="w-4 h-4" />
                                     </Button>
                                 </div>
                             </CardContent>
@@ -189,6 +225,10 @@ export function CommitteeManagement({ initialData }: CommitteeManagementProps) {
                             <div className="space-y-2">
                                 <Label>차장</Label>
                                 <Input value={current.deputy || ''} onChange={(e) => setCurrent({ ...current, deputy: e.target.value })} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>총무</Label>
+                                <Input value={current.generalManager || ''} onChange={(e) => setCurrent({ ...current, generalManager: e.target.value })} />
                             </div>
                             <div className="space-y-2">
                                 <Label>회계</Label>

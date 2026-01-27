@@ -8,4 +8,5 @@ export const MemberFormSchema = z.object({
     gender: z.string().optional(),
     address: z.string().optional(),
     choirPart: z.string().optional(), // For specific choir registration
+    district: z.string().optional(), // 교구/구역 정보
 });

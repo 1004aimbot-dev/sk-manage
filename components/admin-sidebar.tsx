@@ -40,10 +40,10 @@ const churchMenu: MenuItem[] = [
         icon: MessageSquare, // Icon placeholder
         href: "#intro",
         submenu: [
-            { label: "양육프로그램", href: "/admin/intro/training" },
-            { label: "섬기는사람들", href: "/admin/intro/people" },
+            { label: "재정 현황", href: "/admin/intro/offering" },
             { label: "시설안내", href: "/admin/intro/facilities" },
-            { label: "재정 현황", href: "/admin/intro/offering" }, // Added
+            { label: "섬기는사람들", href: "/admin/intro/people" },
+            { label: "양육프로그램", href: "/admin/intro/training" },
         ],
     },
     {
@@ -128,7 +128,10 @@ export function AdminSidebar() {
             </div>
 
             <div className="p-4 border-t border-slate-700">
-                <button className="flex items-center gap-2 text-slate-400 hover:text-white w-full px-4 py-2 text-sm rounded-md transition-colors">
+                <button
+                    onClick={() => import("next-auth/react").then(({ signOut }) => signOut({ callbackUrl: "/login" }))}
+                    className="flex items-center gap-2 text-slate-400 hover:text-white w-full px-4 py-2 text-sm rounded-md transition-colors"
+                >
                     <LogOut size={16} />
                     <span>로그아웃</span>
                 </button>

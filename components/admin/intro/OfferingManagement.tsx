@@ -213,6 +213,8 @@ export function OfferingManagement() {
                                         tickLine={false}
                                         axisLine={false}
                                         tickFormatter={(value) => `${value / 10000}만`}
+                                        domain={[0, 200000000]}
+                                        ticks={[0, 20000000, 40000000, 60000000, 80000000, 100000000, 120000000, 140000000, 160000000, 180000000, 200000000]}
                                     />
                                     <Tooltip
                                         contentStyle={{ backgroundColor: "#fff", borderRadius: "8px", border: "1px solid #E5E7EB" }}

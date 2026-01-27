@@ -37,17 +37,44 @@ export default function GroupPage(props: { params: Params }) {
     const [members, setMembers] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [editingMember, setEditingMember] = useState<any>(null);
+
+    const fetchMembers = async () => {
+        setIsLoading(true);
+        const data = await getMembers();
+        const filtered = data.filter((m: any) => m.district === groupId);
+        setMembers(filtered);
+        setIsLoading(false);
+    };
 
     useEffect(() => {
-        const fetchMembers = async () => {
-            setIsLoading(true);
-            const data = await getMembers();
-            const filtered = data.filter((m: any) => m.district === groupId);
-            setMembers(filtered);
-            setIsLoading(false);
-        };
         fetchMembers();
     }, [groupId, isDialogOpen]);
+
+    const handleEdit = (member: any) => {
+        setEditingMember(member);
+        setIsDialogOpen(true);
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm("정말 삭제하시겠습니까?")) return;
+
+        // Import dynamically to avoid circular dependencies if any
+        const { deleteMember } = await import("@/actions/member-actions");
+        const result = await deleteMember(id);
+
+        if (result.success) {
+            toast.success("삭제되었습니다.");
+            fetchMembers();
+        } else {
+            toast.error("삭제 실패: " + result.error);
+        }
+    };
+
+    const handleAdd = () => {
+        setEditingMember(null);
+        setIsDialogOpen(true);
+    };
 
     return (
         <div className="space-y-6">
@@ -55,13 +82,18 @@ export default function GroupPage(props: { params: Params }) {
 
             <div className="flex items-center justify-between mt-8">
                 <h3 className="text-lg font-semibold tracking-tight">대원 관리</h3>
-                <ChoirRegistrationDialog
-                    groupId={groupId}
-                    groupName={groupName}
-                    open={isDialogOpen}
-                    onOpenChange={setIsDialogOpen}
-                />
+                <Button onClick={handleAdd}>
+                    <Plus className="w-4 h-4 mr-2" /> 대원 추가
+                </Button>
             </div>
+
+            <ChoirRegistrationDialog
+                groupId={groupId}
+                groupName={groupName}
+                open={isDialogOpen}
+                onOpenChange={setIsDialogOpen}
+                initialData={editingMember}
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card>
@@ -90,18 +122,19 @@ export default function GroupPage(props: { params: Params }) {
                                 <TableHead>생년월일</TableHead>
                                 <TableHead>연락처</TableHead>
                                 <TableHead>주소</TableHead>
+                                <TableHead className="text-right">관리</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="h-24 text-center">
+                                    <TableCell colSpan={7} className="h-24 text-center">
                                         <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                                     </TableCell>
                                 </TableRow>
                             ) : members.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                                         등록된 대원이 없습니다.
                                     </TableCell>
                                 </TableRow>
@@ -118,6 +151,10 @@ export default function GroupPage(props: { params: Params }) {
                                         <TableCell>{member.birthDate ? new Date(member.birthDate).toLocaleDateString() : "-"}</TableCell>
                                         <TableCell>{member.phone || "-"}</TableCell>
                                         <TableCell>{member.address || "-"}</TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="sm" onClick={() => handleEdit(member)}>수정</Button>
+                                            <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDelete(member.id)}>삭제</Button>
+                                        </TableCell>
                                     </TableRow>
                                 ))
                             )}
@@ -133,12 +170,14 @@ function ChoirRegistrationDialog({
     groupId,
     groupName,
     open,
-    onOpenChange
+    onOpenChange,
+    initialData
 }: {
     groupId: string,
     groupName: string,
     open: boolean,
-    onOpenChange: (open: boolean) => void
+    onOpenChange: (open: boolean) => void,
+    initialData?: any
 }) {
     const [isPending, startTransition] = useTransition();
 
@@ -155,17 +194,56 @@ function ChoirRegistrationDialog({
         },
     });
 
+    useEffect(() => {
+        if (open) {
+            if (initialData) {
+                // Formatting date for input type="date"
+                const formattedDate = initialData.birthDate
+                    ? new Date(initialData.birthDate).toISOString().split('T')[0]
+                    : "";
+
+                form.reset({
+                    name: initialData.name || "",
+                    phone: initialData.phone || "",
+                    role: initialData.role || "성도",
+                    birthDate: formattedDate,
+                    gender: initialData.gender || "여",
+                    address: initialData.address || "",
+                    choirPart: initialData.choirPart || "Soprano",
+                });
+            } else {
+                form.reset({
+                    name: "",
+                    phone: "",
+                    role: "성도",
+                    birthDate: "",
+                    gender: "여",
+                    address: "",
+                    choirPart: "Soprano",
+                });
+            }
+        }
+    }, [open, initialData, form]);
+
     async function onSubmit(data: any) {
         startTransition(async () => {
             const payload = { ...data, district: groupId };
-            const result = await createMember(payload as any);
+
+            // Dynamic import actions
+            const { createMember, updateMember } = await import("@/actions/member-actions");
+
+            let result;
+            if (initialData?.id) {
+                result = await updateMember(initialData.id, payload);
+            } else {
+                result = await createMember(payload);
+            }
 
             if (result.success) {
-                toast.success(`${groupName} 대원이 등록되었습니다.`);
-                form.reset();
+                toast.success(`${groupName} 대원이 ${initialData ? "수정" : "등록"}되었습니다.`);
                 onOpenChange(false);
             } else {
-                toast.error("등록 실패: " + result.error);
+                toast.error("처리 실패: " + result.error);
             }
         });
     }
@@ -174,7 +252,7 @@ function ChoirRegistrationDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
-                    <DialogTitle>{groupName} 대원 추가</DialogTitle>
+                    <DialogTitle>{groupName} 대원 {initialData ? "수정" : "추가"}</DialogTitle>
                 </DialogHeader>
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -198,7 +276,7 @@ function ChoirRegistrationDialog({
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>성별</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                                             <FormControl>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="선택" />
@@ -235,7 +313,7 @@ function ChoirRegistrationDialog({
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>파트</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                                             <FormControl>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="파트 선택" />
@@ -289,7 +367,7 @@ function ChoirRegistrationDialog({
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>취소</Button>
                             <Button type="submit" disabled={isPending}>
                                 {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                등록하기
+                                {initialData ? "수정하기" : "등록하기"}
                             </Button>
                         </DialogFooter>
                     </form>

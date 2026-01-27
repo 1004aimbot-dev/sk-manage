@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Trash2, Edit, Plus, Users } from "lucide-react";
+import { Trash2, Edit, Plus, Users, Calendar as CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { ko } from "date-fns/locale";
+import { createCellLeader, updateCellLeader, deleteCellLeader } from "@/actions/cell-leader-actions";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 interface CellLeader {
     id: string;
@@ -26,25 +33,62 @@ interface CellLeaderManagementProps {
 
 export function CellLeaderManagement({ initialData }: CellLeaderManagementProps) {
     const [leaders, setLeaders] = useState<CellLeader[]>(initialData);
+
+    useEffect(() => {
+        setLeaders(initialData);
+    }, [initialData]);
+
     const [dialogOpen, setDialogOpen] = useState(false);
     const [dialogMode, setDialogMode] = useState<'add' | 'edit'>('add');
     const [current, setCurrent] = useState<CellLeader>({ id: '', name: '', district: '', cellName: '', region: '', phone: '', appointedDate: '' });
 
     // Delete Handler
-    const handleDelete = (id: string) => {
+    const router = useRouter();
+
+    // Delete Handler
+    const handleDelete = async (id: string) => {
         if (!confirm("정말 삭제하시겠습니까?")) return;
-        setLeaders(prev => prev.filter(l => l.id !== id));
+
+        const result = await deleteCellLeader(id);
+        if (result.success) {
+            toast.success("삭제되었습니다.");
+            router.refresh();
+            setLeaders(prev => prev.filter(l => l.id !== id));
+        } else {
+            toast.error(result.error);
+        }
     };
 
     // Save Handler
-    const handleSave = () => {
-        if (dialogMode === 'add') {
-            const newItem = { ...current, id: Math.random().toString(36).substr(2, 9) };
-            setLeaders(prev => [newItem, ...prev]);
-        } else {
-            setLeaders(prev => prev.map(l => l.id === current.id ? current : l));
+    const handleSave = async () => {
+        if (!current.name) {
+            toast.error("이름을 입력해주세요.");
+            return;
         }
-        setDialogOpen(false);
+
+        let result;
+        if (dialogMode === 'add') {
+            result = await createCellLeader(current);
+        } else {
+            result = await updateCellLeader(current.id, current);
+        }
+
+        if (result.success) {
+            toast.success(dialogMode === 'add' ? "등록되었습니다." : "수정되었습니다.");
+            setDialogOpen(false);
+            router.refresh(); // Refresh server data
+
+            // Optimistic update (optional, but good for UX)
+            if (dialogMode === 'add') {
+                // For add, we might want to wait for refresh or just append locally if we had the ID. 
+                // Since create doesn't return the new ID in my simple action, refreshing is safer.
+                // But preventing UI jump is nice. Let's rely on router.refresh() for now as it's simpler.
+            } else {
+                setLeaders(prev => prev.map(l => l.id === current.id ? current : l));
+            }
+        } else {
+            toast.error(result.error);
+        }
     };
 
     const openDialog = (mode: 'add' | 'edit', item?: CellLeader) => {
@@ -125,7 +169,7 @@ export function CellLeaderManagement({ initialData }: CellLeaderManagementProps)
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label className="text-right">교구</Label>
                             <Input
-                                value={current.district}
+                                value={current.district || ''}
                                 onChange={(e) => setCurrent({ ...current, district: e.target.value })}
                                 className="col-span-3"
                                 placeholder="예: 1교구"
@@ -134,7 +178,7 @@ export function CellLeaderManagement({ initialData }: CellLeaderManagementProps)
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label className="text-right">순 명</Label>
                             <Input
-                                value={current.cellName}
+                                value={current.cellName || ''}
                                 onChange={(e) => setCurrent({ ...current, cellName: e.target.value })}
                                 className="col-span-3"
                                 placeholder="예: 1-1순"
@@ -143,7 +187,7 @@ export function CellLeaderManagement({ initialData }: CellLeaderManagementProps)
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label className="text-right">지역</Label>
                             <Input
-                                value={current.region}
+                                value={current.region || ''}
                                 onChange={(e) => setCurrent({ ...current, region: e.target.value })}
                                 className="col-span-3"
                                 placeholder="예: 분당, 위례"
@@ -152,7 +196,7 @@ export function CellLeaderManagement({ initialData }: CellLeaderManagementProps)
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label className="text-right">이름</Label>
                             <Input
-                                value={current.name}
+                                value={current.name || ''}
                                 onChange={(e) => setCurrent({ ...current, name: e.target.value })}
                                 className="col-span-3"
                             />
@@ -160,7 +204,7 @@ export function CellLeaderManagement({ initialData }: CellLeaderManagementProps)
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label className="text-right">연락처</Label>
                             <Input
-                                value={current.phone}
+                                value={current.phone || ''}
                                 onChange={(e) => setCurrent({ ...current, phone: e.target.value })}
                                 className="col-span-3"
                                 placeholder="010-0000-0000"
@@ -168,12 +212,32 @@ export function CellLeaderManagement({ initialData }: CellLeaderManagementProps)
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label className="text-right">임명일</Label>
-                            <Input
-                                type="date"
-                                value={current.appointedDate}
-                                onChange={(e) => setCurrent({ ...current, appointedDate: e.target.value })}
-                                className="col-span-3"
-                            />
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant={"outline"}
+                                        className={cn(
+                                            "w-full justify-start text-left font-normal col-span-3",
+                                            !current.appointedDate && "text-muted-foreground"
+                                        )}
+                                    >
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {current.appointedDate ? format(new Date(current.appointedDate), "yyyy-MM-dd", { locale: ko }) : <span>날짜를 선택하세요</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                    <Calendar
+                                        mode="single"
+                                        selected={current.appointedDate ? new Date(current.appointedDate) : undefined}
+                                        onSelect={(date) => setCurrent({ ...current, appointedDate: date ? format(date, "yyyy-MM-dd") : "" })}
+                                        initialFocus
+                                        locale={ko}
+                                        captionLayout="dropdown-buttons"
+                                        fromYear={1900}
+                                        toYear={2100}
+                                    />
+                                </PopoverContent>
+                            </Popover>
                         </div>
                     </div>
                     <DialogFooter>
@@ -182,6 +246,6 @@ export function CellLeaderManagement({ initialData }: CellLeaderManagementProps)
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+        </div >
     );
 }

@@ -226,3 +226,19 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
+
+// ==============================
+// 8. 순장 관리 (Cell Leader)
+// ==============================
+model CellLeader {
+  id            String   @id @default(cuid())
+  name          String
+  district      String?   // 1교구
+  cellName      String?   // 1-1순
+  region        String?  // 지역
+  phone         String?
+  appointedDate DateTime? // 임명일
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

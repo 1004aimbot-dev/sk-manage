@@ -242,8 +242,8 @@ function MemberRegistrationDialog({
                     birthDate: initialData.birthDate ? new Date(initialData.birthDate).toISOString().split('T')[0] : "",
                     gender: initialData.gender || "여",
                     address: initialData.address || "",
-                    choirPart: initialData.choirPart,
-                    district: initialData.district
+                    choirPart: initialData.choirPart || "",
+                    district: initialData.district || ""
                 });
             } else {
                 form.reset({
@@ -304,7 +304,7 @@ function MemberRegistrationDialog({
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>직분</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <Select onValueChange={field.onChange} value={field.value}>
                                         <FormControl>
                                             <SelectTrigger>
                                                 <SelectValue placeholder="직분 선택" />
@@ -348,7 +348,7 @@ function MemberRegistrationDialog({
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>성별</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <Select onValueChange={field.onChange} value={field.value}>
                                             <FormControl>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="선택" />
