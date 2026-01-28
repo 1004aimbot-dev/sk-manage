@@ -1,21 +1,38 @@
-"use client";
 
 import { MissionGroupManagement } from "@/components/admin/ministry/MissionGroupManagement";
+import { getMinistries, getMinistryStats } from "@/actions/ministry";
 
-const menGroups = [
-  { id: "m1", name: "1남선교회", age: "70세 이상", president: "김장로", vp: "이집사" },
-  { id: "m2", name: "2남선교회", age: "60-69세", president: "박집사", secretary: "최성도" },
-  { id: "m3", name: "3남선교회", age: "50-59세", president: "정집사", accountant: "강집사" },
-  { id: "m4", name: "4남선교회", age: "40-49세", president: "유집사" },
-  { id: "m5", name: "5남선교회", age: "30-39세", president: "윤성도" },
-];
+export const dynamic = 'force-dynamic';
 
-const menStats = {
-  totalMembers: "120명",
-  meetingInfo: { period: "매월 3주", time: "주일 오후 1시" },
-  eventInfo: { count: "연 2회", season: "봄/가을" }
-};
+export default async function Page() {
+  const [ministriesRes, statsRes] = await Promise.all([
+    getMinistries('MEN'),
+    getMinistryStats('MEN')
+  ]);
 
-export default function Page() {
-  return <MissionGroupManagement title="남선교회" initialData={menGroups} stats={menStats} />;
+  const menGroups = ministriesRes.success && ministriesRes.data ? ministriesRes.data.map(m => {
+    let roleInfo: any = {};
+    try { roleInfo = m.roleInfo ? JSON.parse(m.roleInfo) : {}; } catch (e) { }
+    return {
+      id: m.id,
+      name: m.name,
+      age: m.description || "",
+      president: roleInfo.president || "",
+      vp: roleInfo.vp || "",
+      secretary: roleInfo.secretary || "",
+      accountant: roleInfo.accountant || ""
+    };
+  }) : [];
+
+  const defaultStats = {
+    totalMembers: "0명",
+    meetingInfo: { period: "매월 3주", time: "주일 오후 1시" },
+    eventInfo: { count: "연 2회", season: "봄/가을", title: "행사/대회" }
+  };
+
+  const menStats = statsRes.success && statsRes.data?.data
+    ? JSON.parse(statsRes.data.data)
+    : defaultStats;
+
+  return <MissionGroupManagement category="MEN" title="남선교회" initialData={menGroups} stats={menStats} />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Trash2, Edit, Plus, Users, FileText, Heart, Calculator, Monitor, UserCheck, Cross, Music, Hand, BookOpen, Smile, Sun } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { createMinistry, updateMinistry, deleteMinistry } from "@/actions/ministry";
 
 // Icon Mapping
 const iconMap: Record<string, any> = {
@@ -44,27 +46,113 @@ interface CommitteeManagementProps {
 }
 
 export function CommitteeManagement({ initialData }: CommitteeManagementProps) {
+    const router = useRouter();
     const [committees, setCommittees] = useState<Committee[]>(initialData);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [dialogMode, setDialogMode] = useState<'add' | 'edit'>('add');
     const [current, setCurrent] = useState<Committee>({ id: '', name: '', iconName: 'Users', desc: '' });
+    const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        setCommittees(initialData);
+    }, [initialData]);
 
     // Delete Handler
-    const handleDelete = (id: string, e: React.MouseEvent) => {
+    const handleDelete = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation(); // Card click prevention
         if (!confirm("정말 삭제하시겠습니까?")) return;
+
+        // Optimistic
         setCommittees(prev => prev.filter(c => c.id !== id));
+
+        const res = await deleteMinistry(id);
+        if (!res.success) {
+            alert("삭제 실패");
+            router.refresh();
+        } else {
+            router.refresh();
+        }
     };
 
     // Save Handler
-    const handleSave = () => {
-        if (dialogMode === 'add') {
-            const newItem = { ...current, id: Math.random().toString(36).substr(2, 9) };
-            setCommittees(prev => [...prev, newItem]);
-        } else {
-            setCommittees(prev => prev.map(c => c.id === current.id ? current : c));
+    const handleSave = async () => {
+        if (!current.name) {
+            alert("이름을 입력해주세요.");
+            return;
         }
-        setDialogOpen(false);
+
+        setIsLoading(true);
+        try {
+            const roleInfo = JSON.stringify({
+                chair: current.chair || "",
+                director: current.director || "",
+                deputy: current.deputy || "",
+                generalManager: current.generalManager || "",
+                accountant: current.accountant || "",
+                secretary: current.secretary || ""
+            });
+
+            if (dialogMode === 'add') {
+                const res = await createMinistry({
+                    category: 'COMMITTEE',
+                    name: current.name,
+                    icon: current.iconName,
+                    description: current.desc,
+                    roleInfo: roleInfo
+                });
+
+                if (res.success && res.data) {
+                    const newItem: Committee = {
+                        id: res.data.id,
+                        name: res.data.name,
+                        iconName: res.data.icon || "Users",
+                        desc: res.data.description || "",
+                        chair: current.chair,
+                        director: current.director,
+                        deputy: current.deputy,
+                        generalManager: current.generalManager,
+                        accountant: current.accountant,
+                        secretary: current.secretary
+                    };
+                    setCommittees(prev => [...prev, newItem]);
+                    setDialogOpen(false);
+                    router.refresh();
+                } else {
+                    alert("저장 실패");
+                }
+            } else {
+                const res = await updateMinistry(current.id, {
+                    name: current.name,
+                    icon: current.iconName,
+                    description: current.desc,
+                    roleInfo: roleInfo
+                });
+
+                if (res.success && res.data) {
+                    setCommittees(prev => prev.map(c => c.id === current.id ? {
+                        ...c,
+                        name: res.data.name,
+                        iconName: res.data.icon || "Users",
+                        desc: res.data.description || "",
+                        chair: current.chair,
+                        director: current.director,
+                        deputy: current.deputy,
+                        generalManager: current.generalManager,
+                        accountant: current.accountant,
+                        secretary: current.secretary
+                    } : c));
+                    setDialogOpen(false);
+                    router.refresh();
+                } else {
+                    alert("수정 실패");
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            alert("오류 발생");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const openDialog = (mode: 'add' | 'edit', item?: Committee) => {
@@ -242,7 +330,7 @@ export function CommitteeManagement({ initialData }: CommitteeManagementProps) {
                     </div>
                     <DialogFooter>
                         <Button variant="secondary" onClick={() => setDialogOpen(false)}>취소</Button>
-                        <Button onClick={handleSave}>저장</Button>
+                        <Button onClick={handleSave} disabled={isLoading}>{isLoading ? '저장 중...' : '저장'}</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

@@ -1,17 +1,29 @@
-"use client";
-
 import { DomesticMissionManagement } from "@/components/admin/ministry/DomesticMissionManagement";
+import { getMinistries, getMinistryStats } from "@/actions/ministry";
 
-const initialMissions = [
-  { id: '1', name: "미자립교회 지원", count: 12, desc: "농어촌 및 미자립 교회 후원" },
-  { id: '2', name: "기관 후원", count: 5, desc: "선교 단체 및 복지 기관 후원" },
-];
+export const dynamic = 'force-dynamic';
 
-const initialStats = {
-  evangelism: { frequency: "주 1회", desc: "노방 전도 및 거점 전도" },
-  service: { frequency: "월 2회", desc: "지역 사회 섬김" }
-};
+export default async function Page() {
+  const [ministriesRes, statsRes] = await Promise.all([
+    getMinistries('DOMESTIC'),
+    getMinistryStats('DOMESTIC')
+  ]);
 
-export default function Page() {
-  return <DomesticMissionManagement initialMissions={initialMissions} initialStats={initialStats} />;
+  const missions = ministriesRes.success && ministriesRes.data ? ministriesRes.data.map(m => ({
+    id: m.id,
+    name: m.name,
+    count: m.count || 0,
+    desc: m.description || ""
+  })) : [];
+
+  const defaultStats = {
+    evangelism: { frequency: "주 1회", desc: "노방 전도 및 거점 전도" },
+    service: { frequency: "월 2회", desc: "지역 사회 섬김" }
+  };
+
+  const initialStats = statsRes.success && statsRes.data?.data
+    ? JSON.parse(statsRes.data.data)
+    : defaultStats;
+
+  return <DomesticMissionManagement initialMissions={missions} initialStats={initialStats} />;
 }

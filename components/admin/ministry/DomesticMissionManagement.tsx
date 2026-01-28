@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { MapPin, Home, HeartHandshake, Plus, Edit, Trash2, Save } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { createMinistry, updateMinistry, deleteMinistry, updateMinistryStats } from "@/actions/ministry";
 
 interface DomesticMission {
     id: string;
@@ -28,8 +30,16 @@ interface DomesticMissionManagementProps {
 }
 
 export function DomesticMissionManagement({ initialMissions, initialStats }: DomesticMissionManagementProps) {
+    const router = useRouter();
     const [missions, setMissions] = useState<DomesticMission[]>(initialMissions);
     const [stats, setStats] = useState<DomesticStats>(initialStats);
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Update state when initialData changes (e.g. after refresh)
+    useEffect(() => {
+        setMissions(initialMissions);
+        setStats(initialStats);
+    }, [initialMissions, initialStats]);
 
     // Mission List State
     const [missionDialogOpen, setMissionDialogOpen] = useState(false);
@@ -44,19 +54,76 @@ export function DomesticMissionManagement({ initialMissions, initialStats }: Dom
     const totalSponsored = missions.reduce((acc, curr) => acc + curr.count, 0);
 
     // --- Mission CRUD ---
-    const handleDeleteMission = (id: string) => {
+    const handleDeleteMission = async (id: string) => {
         if (!confirm("정말 삭제하시겠습니까?")) return;
+
+        // Optimistic
         setMissions(prev => prev.filter(m => m.id !== id));
+
+        const res = await deleteMinistry(id);
+        if (!res.success) {
+            alert("삭제 실패");
+            router.refresh(); // Revert
+        } else {
+            router.refresh();
+        }
     };
 
-    const handleSaveMission = () => {
-        if (missionMode === 'add') {
-            const newItem = { ...currentMission, id: Math.random().toString(36).substr(2, 9) };
-            setMissions(prev => [...prev, newItem]);
-        } else {
-            setMissions(prev => prev.map(m => m.id === currentMission.id ? currentMission : m));
+    const handleSaveMission = async () => {
+        if (!currentMission.name) {
+            alert("구분을 입력해주세요.");
+            return;
         }
-        setMissionDialogOpen(false);
+
+        setIsLoading(true);
+        try {
+            if (missionMode === 'add') {
+                const res = await createMinistry({
+                    category: 'DOMESTIC',
+                    name: currentMission.name,
+                    count: currentMission.count,
+                    description: currentMission.desc
+                });
+
+                if (res.success && res.data) {
+                    const newItem = {
+                        id: res.data.id,
+                        name: res.data.name,
+                        count: res.data.count || 0,
+                        desc: res.data.description || ""
+                    };
+                    setMissions(prev => [...prev, newItem]);
+                    setMissionDialogOpen(false);
+                    router.refresh();
+                } else {
+                    alert("저장 실패");
+                }
+            } else {
+                const res = await updateMinistry(currentMission.id, {
+                    name: currentMission.name,
+                    count: currentMission.count,
+                    description: currentMission.desc
+                });
+
+                if (res.success && res.data) {
+                    setMissions(prev => prev.map(m => m.id === currentMission.id ? {
+                        id: res.data.id,
+                        name: res.data.name,
+                        count: res.data.count || 0,
+                        desc: res.data.description || ""
+                    } : m));
+                    setMissionDialogOpen(false);
+                    router.refresh();
+                } else {
+                    alert("수정 실패");
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            alert("오류 발생");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const openMissionDialog = (mode: 'add' | 'edit', item?: DomesticMission) => {
@@ -70,9 +137,26 @@ export function DomesticMissionManagement({ initialMissions, initialStats }: Dom
     };
 
     // --- Stats Update ---
-    const handleSaveStats = () => {
-        setStats(tempStats);
-        setStatsDialogOpen(false);
+    const handleSaveStats = async () => {
+        setIsLoading(true);
+        try {
+            // Optimistic
+            setStats(tempStats);
+            setStatsDialogOpen(false);
+
+            const res = await updateMinistryStats('DOMESTIC', tempStats);
+            if (!res.success) {
+                alert("통계 저장 실패");
+                router.refresh();
+            } else {
+                router.refresh();
+            }
+        } catch (e) {
+            console.error(e);
+            alert("오류 발생");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const openStatsDialog = () => {
@@ -202,7 +286,7 @@ export function DomesticMissionManagement({ initialMissions, initialStats }: Dom
                     </div>
                     <DialogFooter>
                         <Button variant="secondary" onClick={() => setMissionDialogOpen(false)}>취소</Button>
-                        <Button onClick={handleSaveMission}>저장</Button>
+                        <Button onClick={handleSaveMission} disabled={isLoading}>{isLoading ? '저장 중...' : '저장'}</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -240,7 +324,7 @@ export function DomesticMissionManagement({ initialMissions, initialStats }: Dom
                     </div>
                     <DialogFooter>
                         <Button variant="secondary" onClick={() => setStatsDialogOpen(false)}>취소</Button>
-                        <Button onClick={handleSaveStats}>저장</Button>
+                        <Button onClick={handleSaveStats} disabled={isLoading}>저장</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

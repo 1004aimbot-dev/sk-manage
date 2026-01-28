@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,30 +8,34 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User, Plus, Edit, Trash2 } from "lucide-react";
-
 import { Textarea } from "@/components/ui/textarea";
+import { useRouter } from "next/navigation";
+import { createServingPerson, updateServingPerson, deleteServingPerson, type CategoryType } from "@/actions/serving-people";
 
+// Update Interface to match Prisma Schema
 interface ServingPerson {
     id: string;
-    category: 'pastor' | 'evangelist' | 'elder';
+    category: string; // Prisma returns string
     role: string;
     name: string;
-    desc: string;
-    imageUrl?: string;
+    desc: string | null; // Nullable in DB
+    imageUrl: string | null; // Nullable in DB
 }
 
-const initialData: ServingPerson[] = [
-    { id: '1', category: 'pastor', role: "담임목사", name: "홍길동", desc: "총괄 목회" },
-    { id: '2', category: 'pastor', role: "부목사", name: "김철수", desc: "행정 / 청년부" },
-    { id: '3', category: 'pastor', role: "부목사", name: "이영희", desc: "교구 / 훈련" },
-    { id: '4', category: 'evangelist', role: "전도사", name: "박민수", desc: "초등부 / 찬양" },
-    { id: '5', category: 'elder', role: "장로회", name: "장로회", desc: "김장로, 이장로, 박장로, 최장로... (명단 준비 중)" },
-];
+interface ServingPeopleManagementProps {
+    initialPeople: ServingPerson[];
+}
 
-export function ServingPeopleManagement() {
-    const [people, setPeople] = useState<ServingPerson[]>(initialData);
+export function ServingPeopleManagement({ initialPeople }: ServingPeopleManagementProps) {
+    const router = useRouter();
+    const [people, setPeople] = useState<ServingPerson[]>(initialPeople);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [dialogMode, setDialogMode] = useState<'add' | 'edit'>('add');
+    const [isLoading, setIsLoading] = useState(false);
+
+    // State for the form, handle nulls by defaulting to empty strings for inputs if needed, 
+    // but keep state matching the interface or similar.
+    // For the form, strictly speaking we want controlled inputs, so we might want a separate type or ensure we convert null to "" in value props.
     const [current, setCurrent] = useState<ServingPerson>({
         id: '',
         category: 'pastor',
@@ -41,9 +45,24 @@ export function ServingPeopleManagement() {
         imageUrl: ''
     });
 
-    const handleDelete = (id: string) => {
+    useEffect(() => {
+        setPeople(initialPeople);
+    }, [initialPeople]);
+
+    const handleDelete = async (id: string) => {
         if (!confirm("정말 삭제하시겠습니까?")) return;
+
+        // Optimistic update
+        const previous = people;
         setPeople(prev => prev.filter(p => p.id !== id));
+
+        const res = await deleteServingPerson(id);
+        if (!res.success) {
+            alert("삭제에 실패했습니다.");
+            setPeople(previous); // Revert
+        } else {
+            router.refresh();
+        }
     };
 
     // Image Upload Handler
@@ -58,25 +77,64 @@ export function ServingPeopleManagement() {
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!current.name) {
             alert("이름을 입력해주세요.");
             return;
         }
 
-        if (dialogMode === 'add') {
-            const newItem = { ...current, id: Math.random().toString(36).substr(2, 9) };
-            setPeople(prev => [...prev, newItem]);
-        } else {
-            setPeople(prev => prev.map(p => p.id === current.id ? current : p));
+        setIsLoading(true);
+        try {
+            // Ensure category is valid CategoryType for the server action
+            const validCategory = (current.category as CategoryType) || 'pastor';
+
+            if (dialogMode === 'add') {
+                const res = await createServingPerson({
+                    category: validCategory,
+                    role: current.role,
+                    name: current.name,
+                    desc: current.desc || "",
+                    imageUrl: current.imageUrl || undefined
+                });
+                if (res.success && res.data) {
+                    setPeople(prev => [...prev, res.data as ServingPerson]);
+                    setDialogOpen(false);
+                    router.refresh();
+                } else {
+                    alert("저장에 실패했습니다.");
+                }
+            } else {
+                const res = await updateServingPerson(current.id, {
+                    category: validCategory,
+                    role: current.role,
+                    name: current.name,
+                    desc: current.desc || "",
+                    imageUrl: current.imageUrl || undefined
+                });
+                if (res.success && res.data) {
+                    setPeople(prev => prev.map(p => p.id === current.id ? res.data as ServingPerson : p));
+                    setDialogOpen(false);
+                    router.refresh();
+                } else {
+                    alert("수정에 실패했습니다.");
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            alert("오류가 발생했습니다.");
+        } finally {
+            setIsLoading(false);
         }
-        setDialogOpen(false);
     };
 
     const openDialog = (mode: 'add' | 'edit', item?: ServingPerson) => {
         setDialogMode(mode);
         if (mode === 'edit' && item) {
-            setCurrent(item);
+            setCurrent({
+                ...item,
+                desc: item.desc || '', // Ensure string for form
+                imageUrl: item.imageUrl || '' // Ensure string for form
+            });
         } else {
             setCurrent({ id: '', category: 'pastor', role: '', name: '', desc: '', imageUrl: '' });
         }
@@ -97,7 +155,7 @@ export function ServingPeopleManagement() {
             </div>
             <CardHeader className="text-center p-3 pt-0">
                 <CardTitle className="text-base">{person.name} <span className="text-xs font-normal text-slate-600 block mt-1">{person.role}</span></CardTitle>
-                <p className="text-xs text-slate-500 line-clamp-2 mt-1">{person.desc}</p>
+                <p className="text-xs text-slate-500 line-clamp-2 mt-1">{person.desc || ""}</p>
             </CardHeader>
 
             <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-white/80 p-1 rounded-md shadow-sm">
@@ -163,7 +221,7 @@ export function ServingPeopleManagement() {
                                 <CardTitle>{person.name}</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <p className="text-slate-600 whitespace-pre-wrap">{person.desc}</p>
+                                <p className="text-slate-600 whitespace-pre-wrap">{person.desc || ""}</p>
                             </CardContent>
                         </Card>
                     ))}
@@ -204,7 +262,7 @@ export function ServingPeopleManagement() {
                             <Label>그룹 선택</Label>
                             <Select
                                 value={current.category}
-                                onValueChange={(val: 'pastor' | 'evangelist' | 'elder') => setCurrent({ ...current, category: val })}
+                                onValueChange={(val) => setCurrent({ ...current, category: val })}
                             >
                                 <SelectTrigger>
                                     <SelectValue placeholder="그룹 선택" />
@@ -238,7 +296,7 @@ export function ServingPeopleManagement() {
                             <Label>설명 / 담당사역</Label>
                             <Textarea
                                 placeholder="담당 사역이나 소개글을 입력하세요."
-                                value={current.desc}
+                                value={current.desc || ""}
                                 onChange={(e) => setCurrent({ ...current, desc: e.target.value })}
                             />
                         </div>

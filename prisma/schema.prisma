@@ -242,3 +242,77 @@ model CellLeader {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
+
+// ==============================
+// 9. 섬기는 사람들 (Serving People)
+// ==============================
+model ServingPerson {
+  id          String   @id @default(cuid())
+  category    String   // pastor, evangelist, elder
+  role        String
+  name        String
+  desc        String?  // description
+  imageUrl    String?
+  order       Int      @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ==============================
+// 10. 사역 (Ministry)
+// ==============================
+model Ministry {
+  id          String   @id @default(cuid())
+  category    String   // DOMESTIC, OVERSEAS, COMMITTEE, MEN, WOMEN
+  name        String
+  description String?
+  count       Int?
+  location    String?
+  roleInfo    String?  // JSON string
+  icon        String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model MinistryStat {
+  id        String   @id @default(cuid())
+  category  String
+  data      String   // JSON string
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==============================
+// 11. 훈련 프로그램 (Training)
+// ==============================
+model TrainingProgram {
+  id             String   @id @default(cuid())
+  term           String
+  period         String
+  participants   String
+  curriculum     String   // JSON or text
+  completionRate String?
+  testimony      String?
+  note           String?
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ==============================
+// 12. 새가족 (Newcomer)
+// ==============================
+model Newcomer {
+  id             String   @id @default(cuid())
+  name           String
+  phone          String?
+  registeredDate String   // YYYY-MM-DD
+  introducer     String?
+  description    String?
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}

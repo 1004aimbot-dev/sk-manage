@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { format, parseISO, startOfMonth, isSameMonth } from "date-fns";
+import { useState, useEffect } from "react";
+import { format, parseISO, isSameMonth } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,22 +10,37 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Trash2, Edit, Plus, UserPlus, Filter } from "lucide-react";
+import { Trash2, Edit, Plus, UserPlus, Filter, Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useNewcomers, Newcomer } from "@/context/NewcomerContext"; // Import Context
+import { upsertNewcomer, deleteNewcomer } from "@/actions/newcomer";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
-// Props no longer needed since we use Context, but kept if we want to customize behavior
-interface NewcomerManagementProps {
-    // initialData is removed/optional now
-    initialData?: any;
+export interface Newcomer {
+    id: string;
+    name: string;
+    phone: string | null;
+    registeredDate: string;
+    introducer: string | null;
+    description: string | null;
 }
 
-export function NewcomerManagement({ }: NewcomerManagementProps) {
-    const { newcomers, addNewcomer, updateNewcomer, deleteNewcomer } = useNewcomers(); // Use Context
+interface NewcomerManagementProps {
+    initialData: Newcomer[];
+}
+
+export function NewcomerManagement({ initialData }: NewcomerManagementProps) {
+    const router = useRouter();
+    const [newcomers, setNewcomers] = useState<Newcomer[]>(initialData);
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        setNewcomers(initialData);
+    }, [initialData]);
 
     const [dialogOpen, setDialogOpen] = useState(false);
     const [dialogMode, setDialogMode] = useState<'add' | 'edit'>('add');
-    const [current, setCurrent] = useState<Newcomer>({ id: '', name: '', registeredDate: '', introducer: '', description: '' });
+    const [current, setCurrent] = useState<Newcomer>({ id: '', name: '', phone: '', registeredDate: '', introducer: '', description: '' });
     const [date, setDate] = useState<Date | undefined>(undefined);
 
     // Filter State
@@ -41,23 +56,45 @@ export function NewcomerManagement({ }: NewcomerManagementProps) {
     const thisYearCount = newcomers.filter(n => n.registeredDate.startsWith(new Date().getFullYear().toString())).length;
 
     // Delete Handler
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (!confirm("정말 삭제하시겠습니까?")) return;
-        deleteNewcomer(id);
+
+        const res = await deleteNewcomer(id);
+        if (res.success) {
+            toast.success("삭제되었습니다.");
+            router.refresh();
+        } else {
+            toast.error("삭제 실패: " + res.error);
+        }
     };
 
     // Save Handler
-    const handleSave = () => {
+    const handleSave = async () => {
         const dateStr = date ? format(date, "yyyy-MM-dd") : current.registeredDate;
 
-        if (dialogMode === 'add') {
-            const newItem = { ...current, registeredDate: dateStr, id: Math.random().toString(36).substr(2, 9) };
-            addNewcomer(newItem);
-        } else {
-            const updatedItem = { ...current, registeredDate: dateStr };
-            updateNewcomer(updatedItem);
+        setIsSaving(true);
+        try {
+            const res = await upsertNewcomer({
+                id: dialogMode === 'edit' ? current.id : undefined,
+                name: current.name,
+                phone: current.phone || undefined,
+                registeredDate: dateStr,
+                introducer: current.introducer || undefined,
+                description: current.description || undefined
+            });
+
+            if (res.success) {
+                toast.success(dialogMode === 'add' ? "등록되었습니다. (교인 명부에도 자동 추가됨)" : "수정되었습니다.");
+                setDialogOpen(false);
+                router.refresh();
+            } else {
+                toast.error("저장 실패: " + res.error);
+            }
+        } catch (e) {
+            toast.error("오류가 발생했습니다.");
+        } finally {
+            setIsSaving(false);
         }
-        setDialogOpen(false);
     };
 
     const openDialog = (mode: 'add' | 'edit', item?: Newcomer) => {
@@ -68,7 +105,7 @@ export function NewcomerManagement({ }: NewcomerManagementProps) {
         } else {
             const today = new Date();
             const todayStr = format(today, "yyyy-MM-dd");
-            setCurrent({ id: '', name: '', registeredDate: todayStr, introducer: '', description: '' });
+            setCurrent({ id: '', name: '', phone: '', registeredDate: todayStr, introducer: '', description: '' });
             setDate(today);
         }
         setDialogOpen(true);
@@ -93,7 +130,7 @@ export function NewcomerManagement({ }: NewcomerManagementProps) {
         <div className="space-y-8">
             <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold tracking-tight">새가족 소개</h2>
-                <Button onClick={() => openDialog('add')}><Plus className="w-4 h-4 mr-2" /> 새가족 등록</Button>
+                <Button onClick={() => openDialog('add')} disabled={isSaving}><Plus className="w-4 h-4 mr-2" /> 새가족 등록</Button>
             </div>
 
             <Card>
@@ -124,6 +161,7 @@ export function NewcomerManagement({ }: NewcomerManagementProps) {
                             <TableRow>
                                 <TableHead className="w-[120px]">등록일</TableHead>
                                 <TableHead className="w-[100px]">이름</TableHead>
+                                <TableHead className="w-[120px]">연락처</TableHead>
                                 <TableHead className="w-[100px]">인도자</TableHead>
                                 <TableHead>소개/비고</TableHead>
                                 <TableHead className="text-right w-[100px]">관리</TableHead>
@@ -132,7 +170,7 @@ export function NewcomerManagement({ }: NewcomerManagementProps) {
                         <TableBody>
                             {filteredNewcomers.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
+                                    <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
                                         {selectedMonth === 'all' ? "등록된 새가족이 없습니다." : "선택한 달에 등록된 새가족이 없습니다."}
                                     </TableCell>
                                 </TableRow>
@@ -141,8 +179,9 @@ export function NewcomerManagement({ }: NewcomerManagementProps) {
                                     <TableRow key={n.id}>
                                         <TableCell>{n.registeredDate}</TableCell>
                                         <TableCell className="font-medium">{n.name}</TableCell>
+                                        <TableCell>{n.phone || "-"}</TableCell>
                                         <TableCell>{n.introducer || "-"}</TableCell>
-                                        <TableCell className="max-w-[300px] truncate" title={n.description}>{n.description || "-"}</TableCell>
+                                        <TableCell className="max-w-[300px] truncate" title={n.description || ""}>{n.description || "-"}</TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="icon" onClick={() => openDialog('edit', n)}>
                                                 <Edit className="w-4 h-4" />
@@ -181,9 +220,18 @@ export function NewcomerManagement({ }: NewcomerManagementProps) {
                             </div>
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">연락처</Label>
+                            <Input
+                                value={current.phone || ''}
+                                onChange={(e) => setCurrent({ ...current, phone: e.target.value })}
+                                className="col-span-3"
+                                placeholder="010-0000-0000"
+                            />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
                             <Label className="text-right">인도자</Label>
                             <Input
-                                value={current.introducer}
+                                value={current.introducer || ''}
                                 onChange={(e) => setCurrent({ ...current, introducer: e.target.value })}
                                 className="col-span-3"
                                 placeholder="예: 김집사, 자진등록"
@@ -192,7 +240,7 @@ export function NewcomerManagement({ }: NewcomerManagementProps) {
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label className="text-right">소개/비고</Label>
                             <Textarea
-                                value={current.description}
+                                value={current.description || ''}
                                 onChange={(e) => setCurrent({ ...current, description: e.target.value })}
                                 className="col-span-3"
                                 placeholder="간단한 소개 (가족관계, 거주지 등)"
@@ -201,7 +249,9 @@ export function NewcomerManagement({ }: NewcomerManagementProps) {
                     </div>
                     <DialogFooter>
                         <Button variant="secondary" onClick={() => setDialogOpen(false)}>취소</Button>
-                        <Button onClick={handleSave}>저장</Button>
+                        <Button onClick={handleSave} disabled={isSaving}>
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "저장"}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

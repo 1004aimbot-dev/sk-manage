@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,12 +8,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Trash2, Edit, Plus, Globe, Plane, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { createMinistry, updateMinistry, deleteMinistry } from "@/actions/ministry";
 
 interface Missionary {
     id: string;
     name: string; // 담당 선교사
     spouse?: string; // 배우자
-    children?: string; // 자녀 (Comma separated or string)
+    children?: string; // 자녀
     location: string; // 장소/국가
     believers?: number; // 교인수
 }
@@ -23,26 +25,102 @@ interface MissionaryManagementProps {
 }
 
 export function MissionaryManagement({ initialData }: MissionaryManagementProps) {
+    const router = useRouter();
     const [missionaries, setMissionaries] = useState<Missionary[]>(initialData);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [dialogMode, setDialogMode] = useState<'add' | 'edit'>('add');
     const [current, setCurrent] = useState<Missionary>({ id: '', name: '', location: '', believers: 0 });
+    const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        setMissionaries(initialData);
+    }, [initialData]);
 
     // Delete Handler
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (!confirm("정말 삭제하시겠습니까?")) return;
+
+        // Optimistic
         setMissionaries(prev => prev.filter(m => m.id !== id));
+
+        const res = await deleteMinistry(id);
+        if (!res.success) {
+            alert("삭제 실패");
+            router.refresh();
+        } else {
+            router.refresh();
+        }
     };
 
     // Save Handler
-    const handleSave = () => {
-        if (dialogMode === 'add') {
-            const newItem = { ...current, id: Math.random().toString(36).substr(2, 9) };
-            setMissionaries(prev => [...prev, newItem]);
-        } else {
-            setMissionaries(prev => prev.map(m => m.id === current.id ? current : m));
+    const handleSave = async () => {
+        if (!current.name) {
+            alert("선교사 이름을 입력해주세요.");
+            return;
         }
-        setDialogOpen(false);
+
+        setIsLoading(true);
+        try {
+            const roleInfo = JSON.stringify({
+                spouse: current.spouse || "",
+                children: current.children || ""
+            });
+
+            if (dialogMode === 'add') {
+                const res = await createMinistry({
+                    category: 'OVERSEAS',
+                    name: current.name,
+                    location: current.location,
+                    count: current.believers || 0,
+                    roleInfo: roleInfo
+                });
+
+                if (res.success && res.data) {
+                    // Update local state (optimistic-ish, or wait for refresh)
+                    // We parse back for local usage
+                    const newItem: Missionary = {
+                        id: res.data.id,
+                        name: res.data.name,
+                        location: res.data.location || "",
+                        believers: res.data.count || 0,
+                        spouse: current.spouse,
+                        children: current.children
+                    };
+                    setMissionaries(prev => [...prev, newItem]);
+                    setDialogOpen(false);
+                    router.refresh();
+                } else {
+                    alert("저장 실패");
+                }
+            } else {
+                const res = await updateMinistry(current.id, {
+                    name: current.name,
+                    location: current.location,
+                    count: current.believers || 0,
+                    roleInfo: roleInfo
+                });
+
+                if (res.success && res.data) {
+                    setMissionaries(prev => prev.map(m => m.id === current.id ? {
+                        ...m,
+                        name: res.data.name,
+                        location: res.data.location || "",
+                        believers: res.data.count || 0,
+                        spouse: current.spouse,
+                        children: current.children
+                    } : m));
+                    setDialogOpen(false);
+                    router.refresh();
+                } else {
+                    alert("수정 실패");
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            alert("오류 발생");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const openDialog = (mode: 'add' | 'edit', item?: Missionary) => {
@@ -58,7 +136,6 @@ export function MissionaryManagement({ initialData }: MissionaryManagementProps)
     // Stats
     const totalNations = new Set(missionaries.map(m => m.location)).size;
     const totalFamilies = missionaries.length;
-    // Estimate total believers logic if needed, simplistically sum
     const totalBelievers = missionaries.reduce((acc, cur) => acc + (cur.believers || 0), 0);
 
     return (
@@ -196,7 +273,7 @@ export function MissionaryManagement({ initialData }: MissionaryManagementProps)
                     </div>
                     <DialogFooter>
                         <Button variant="secondary" onClick={() => setDialogOpen(false)}>취소</Button>
-                        <Button onClick={handleSave}>저장</Button>
+                        <Button onClick={handleSave} disabled={isLoading}>{isLoading ? '저장 중...' : '저장'}</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, CalendarCheck, Coins, ArrowUpRight, UserPlus } from "lucide-react";
+import { Users, CalendarCheck, Coins, ArrowUpRight, UserPlus, Loader2 } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
     Table,
@@ -11,61 +12,41 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { useNewcomers } from "@/context/NewcomerContext"; // Import Context Hook
-import { useOfferings } from "@/context/OfferingContext"; // Import Offering Context
-import { useNextGen } from "@/context/NextGenContext"; // Import NextGen Context
-import { format, startOfWeek, endOfWeek, isWithinInterval, parseISO, startOfMonth, endOfMonth, eachWeekOfInterval, subWeeks } from "date-fns";
+import { useOfferings } from "@/context/OfferingContext"; // Still use Offering Context for now as it wasn't requested to change
+import { useNextGen } from "@/context/NextGenContext"; // Still use NextGen Context for now
+import { format, startOfWeek, endOfWeek, subWeeks, eachWeekOfInterval, isWithinInterval, parseISO } from "date-fns";
+import { getDashboardStats } from "@/actions/dashboard"; // Import Server Action
 
-// Mock attendance data (kept as is for now)
-const attendanceData = [
-    { name: "10월 1주", uv: 720 },
-    { name: "10월 2주", uv: 740 },
-    { name: "10월 3주", uv: 750 },
-    { name: "10월 4주", uv: 790 },
-    { name: "11월 1주", uv: 780 },
-    { name: "11월 2주", uv: 800 },
-    { name: "11월 3주", uv: 810 },
-    { name: "11월 4주", uv: 820 },
-    { name: "12월 1주", uv: 830 },
-    { name: "12월 2주", uv: 840 },
-    { name: "12월 3주", uv: 850 },
-    { name: "12월 4주", uv: 856 },
-];
-
+// --- Client Component for Dashboard UI ---
 export default function AdminDashboard() {
-    const { newcomers } = useNewcomers(); // Use Context
-    const { offerings } = useOfferings(); // Use Offering Context
-    const { stats: nextGenStats } = useNextGen(); // Use NextGen Context
+    const { offerings } = useOfferings();
+    const { stats: nextGenStats } = useNextGen();
+
+    const [stats, setStats] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
 
     const today = new Date();
     const startOfCurrentWeek = startOfWeek(today, { weekStartsOn: 0 });
     const endOfCurrentWeek = endOfWeek(today, { weekStartsOn: 0 });
 
-    // --- Newcomer Logic ---
-    const thisWeekNewcomers = newcomers.filter(n => {
-        const regDate = parseISO(n.registeredDate);
-        return isWithinInterval(regDate, { start: startOfCurrentWeek, end: endOfCurrentWeek });
-    });
-    const thisWeekCount = thisWeekNewcomers.length;
+    useEffect(() => {
+        async function fetchStats() {
+            try {
+                const res = await getDashboardStats();
+                if (res.success) {
+                    setStats(res.data);
+                }
+            } catch (error) {
+                console.error(error);
+            } finally {
+                setLoading(false);
+            }
+        }
+        fetchStats();
+    }, []);
 
-    // Generate Newcomer Chart Data (From 2026 Week 1 to Today)
-    const end = today;
-    const start = new Date(2026, 0, 1); // 2026-01-01
-    const weeks = eachWeekOfInterval({ start, end }, { weekStartsOn: 0 });
 
-    const newcomerChartData = weeks.map(weekStart => {
-        const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
-        const count = newcomers.filter(n => {
-            const regDate = parseISO(n.registeredDate);
-            return isWithinInterval(regDate, { start: weekStart, end: weekEnd });
-        });
-        return {
-            name: format(weekStart, "M.d"), // Shorten label
-            count: count.length
-        };
-    });
-
-    // --- Offering Logic ---
+    // --- Offering Logic (Kept Client Side for now) ---
     // 1. This Week's Offering Total
     const thisWeekOfferings = offerings.filter(o => {
         const date = parseISO(o.date);
@@ -73,8 +54,7 @@ export default function AdminDashboard() {
     });
     const thisWeekOfferingTotal = thisWeekOfferings.reduce((sum, o) => sum + o.amount, 0);
 
-    // 2. Weekly Offering Chart Data (Last 12 Weeks or 2026)
-    // Let's show recent 8 weeks for better visibility
+    // 2. Weekly Offering Chart Data (Recent 8 Weeks)
     const offeringStart = subWeeks(today, 7);
     const offeringWeeks = eachWeekOfInterval({ start: offeringStart, end: today }, { weekStartsOn: 0 });
 
@@ -91,14 +71,13 @@ export default function AdminDashboard() {
         };
     });
 
-    // Recent 3 Newcomers for the table
-    const recentNewcomers = [...newcomers]
-        .sort((a, b) => new Date(b.registeredDate).getTime() - new Date(a.registeredDate).getTime())
-        .slice(0, 3);
-
     const formatCurrency = (val: number) => {
         return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW', maximumFractionDigits: 0 }).format(val);
     };
+
+    if (loading) {
+        return <div className="flex h-96 items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>;
+    }
 
     return (
         <div className="space-y-8">
@@ -106,15 +85,15 @@ export default function AdminDashboard() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatsCard
                     title="총 교인 수"
-                    value="1,203"
-                    desc="+12명 (지난달 대비)"
+                    value={stats?.totalMembers ? `${stats.totalMembers.toLocaleString()}` : "1,203"}
+                    desc="실시간 데이터"
                     icon={Users}
                     color="bg-blue-500"
                 />
                 <StatsCard
                     title="이번 주 출석"
                     value="856"
-                    desc="출석률 71.1%"
+                    desc="출석률 71.1% (Mock)"
                     icon={CalendarCheck}
                     color="bg-green-500"
                 />
@@ -127,7 +106,7 @@ export default function AdminDashboard() {
                 />
                 <StatsCard
                     title="새가족 등록"
-                    value={`${thisWeekCount}`}
+                    value={`${stats?.thisWeekNewcomerCount || 0}`}
                     desc="이번 주 등록"
                     icon={UserPlus}
                     color="bg-cyan-500"
@@ -136,11 +115,7 @@ export default function AdminDashboard() {
 
             {/* Charts Row */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-                {/* Weekly Offering Chart (Replaces Attendance for now, or add alongside) */}
-                {/* Let's keep Attendance and replace it with Offering as requested, OR put Offering where Attendance was.
-                    The user asked: "주별 월별 헌금 현황을 그래프로 한눈에 볼수 있도록 나타내줘"
-                    I will replace the Attendance Chart spot with Weekly Offering Chart for prominence.
-                 */}
+                {/* Offering Chart */}
                 <Card className="col-span-4 h-full">
                     <CardHeader>
                         <CardTitle>주별 헌금 현황 (최근 8주)</CardTitle>
@@ -172,15 +147,15 @@ export default function AdminDashboard() {
                     </CardContent>
                 </Card>
 
-                {/* Newcomer Chart */}
+                {/* Newcomer Chart (Real Data) */}
                 <Card className="col-span-3 h-full">
                     <CardHeader>
-                        <CardTitle>새가족 등록 현황 (2026년)</CardTitle>
+                        <CardTitle>새가족 등록 현황 ({today.getFullYear()}년)</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="h-[300px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={newcomerChartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                                <BarChart data={stats?.newcomerChartData || []} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                                     <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} />
                                     <YAxis stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
@@ -225,7 +200,7 @@ export default function AdminDashboard() {
                     </CardContent>
                 </Card>
 
-                {/* Recent Members Table */}
+                {/* Recent Members Table (Real Newcomers) */}
                 <Card className="col-span-4 h-full">
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle>최근 등록 교인</CardTitle>
@@ -241,18 +216,26 @@ export default function AdminDashboard() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {recentNewcomers.map((member) => (
-                                    <TableRow key={member.id}>
-                                        <TableCell className="font-medium">{member.name}</TableCell>
-                                        <TableCell>{member.registeredDate}</TableCell>
-                                        <TableCell>{member.introducer}</TableCell>
-                                        <TableCell className="text-right">
-                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                새가족
-                                            </span>
+                                {stats?.recentNewcomers && stats.recentNewcomers.length > 0 ? (
+                                    stats.recentNewcomers.map((member: any) => (
+                                        <TableRow key={member.id}>
+                                            <TableCell className="font-medium">{member.name}</TableCell>
+                                            <TableCell>{member.registeredDate}</TableCell>
+                                            <TableCell>{member.introducer || "-"}</TableCell>
+                                            <TableCell className="text-right">
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                    새가족
+                                                </span>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="text-center text-muted-foreground h-24">
+                                            등록된 새가족이 없습니다.
                                         </TableCell>
                                     </TableRow>
-                                ))}
+                                )}
                             </TableBody>
                         </Table>
                     </CardContent>

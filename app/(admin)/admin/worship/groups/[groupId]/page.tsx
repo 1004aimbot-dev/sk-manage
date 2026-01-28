@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { createMember, getMembers } from "@/actions/member-actions";
+import { getMembers } from "@/actions/member-actions";
+import { getMinistryByName } from "@/actions/ministry"; // Import
 import { MemberFormSchema } from "@/lib/schemas";
 import { WorshipGroupDetail } from "@/components/admin/worship/WorshipGroupDetail";
 
@@ -38,18 +39,37 @@ export default function GroupPage(props: { params: Params }) {
     const [isLoading, setIsLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingMember, setEditingMember] = useState<any>(null);
+    const [officers, setOfficers] = useState<any>(undefined); // State for officers
 
-    const fetchMembers = async () => {
+    const fetchData = async () => {
         setIsLoading(true);
-        const data = await getMembers();
-        const filtered = data.filter((m: any) => m.district === groupId);
+        // Parallel fetch
+        const [membersData, ministryRes] = await Promise.all([
+            getMembers(),
+            getMinistryByName('WORSHIP', groupId)
+        ]);
+
+        // Process Members
+        const filtered = membersData.filter((m: any) => m.district === groupId);
         setMembers(filtered);
+
+        // Process Ministry (Officers)
+        if (ministryRes.success && ministryRes.data?.roleInfo) {
+            try {
+                const parsed = JSON.parse(ministryRes.data.roleInfo);
+                setOfficers(parsed);
+            } catch (e) {
+                console.error("Failed to parse roleInfo", e);
+            }
+        }
+
         setIsLoading(false);
     };
 
     useEffect(() => {
-        fetchMembers();
-    }, [groupId, isDialogOpen]);
+        fetchData();
+    }, [groupId, isDialogOpen]); // Re-fetch when dialog closes (if members added) 
+    // Actually fetching ministry info doesn't depend on member dialog, but simplicity implies clean reload.
 
     const handleEdit = (member: any) => {
         setEditingMember(member);
@@ -65,7 +85,7 @@ export default function GroupPage(props: { params: Params }) {
 
         if (result.success) {
             toast.success("삭제되었습니다.");
-            fetchMembers();
+            fetchData();
         } else {
             toast.error("삭제 실패: " + result.error);
         }
@@ -78,7 +98,7 @@ export default function GroupPage(props: { params: Params }) {
 
     return (
         <div className="space-y-6">
-            <WorshipGroupDetail groupName={groupName} groupId={groupId} />
+            <WorshipGroupDetail groupName={groupName} groupId={groupId} initialOfficers={officers} />
 
             <div className="flex items-center justify-between mt-8">
                 <h3 className="text-lg font-semibold tracking-tight">대원 관리</h3>

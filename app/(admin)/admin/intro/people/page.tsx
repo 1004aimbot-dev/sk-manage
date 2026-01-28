@@ -1,5 +1,9 @@
 import { ServingPeopleManagement } from "@/components/admin/intro/ServingPeopleManagement";
+import { getServingPeople } from "@/actions/serving-people";
 
-export default function PeoplePage() {
-  return <ServingPeopleManagement />;
+export const dynamic = 'force-dynamic';
+
+export default async function PeoplePage() {
+  const { data } = await getServingPeople();
+  return <ServingPeopleManagement initialPeople={data || []} />;
 }

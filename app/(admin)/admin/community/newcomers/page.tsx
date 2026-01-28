@@ -1,8 +1,9 @@
-"use client";
-
 import { NewcomerManagement } from "@/components/admin/community/NewcomerManagement";
-import { initialNewcomers } from "@/lib/mock-data";
+import { getNewcomers } from "@/actions/newcomer";
 
-export default function Page() {
-  return <NewcomerManagement />;
+export default async function Page() {
+  const res = await getNewcomers();
+  const initialData = res.success ? (res.data as any[]) : [];
+
+  return <NewcomerManagement initialData={initialData} />;
 }

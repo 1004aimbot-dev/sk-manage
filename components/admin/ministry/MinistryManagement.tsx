@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,8 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Trash2, Edit, Plus, User, UserCheck, UserPlus, Users } from "lucide-react";
+import { Trash2, Edit, Plus, User, UserCheck, UserPlus, Users, Save, Loader2 } from "lucide-react";
 import { useNextGen } from "@/context/NextGenContext";
+import { upsertMinistry } from "@/actions/ministry";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 interface Person {
     id: string;
@@ -28,12 +33,14 @@ interface MinistryData {
 interface MinistryManagementProps {
     title: string;
     initialData: MinistryData;
-    departmentId?: string; // ID to sync with context
+    departmentId?: string; // ID to sync with context (preschool, elementary, etc.)
 }
 
 export function MinistryManagement({ title, initialData, departmentId }: MinistryManagementProps) {
+    const router = useRouter();
     const [data, setData] = useState<MinistryData>(initialData);
     const { updateStats, stats } = useNextGen();
+    const [isSaving, setIsSaving] = useState(false);
 
     // Sync Total Members when students change
     useEffect(() => {
@@ -46,10 +53,40 @@ export function MinistryManagement({ title, initialData, departmentId }: Ministr
     const currentDeptStats = stats.find(s => s.id === departmentId);
     const [attendance, setAttendance] = useState(currentDeptStats?.currentAttendance || 0);
 
+    // --- Persist Data to DB ---
+    const saveDataToDB = async (newData: MinistryData) => {
+        if (!departmentId) return;
+
+        setIsSaving(true);
+        try {
+            // We use 'NEXT_GEN' category and departmentId as name
+            const res = await upsertMinistry('NEXT_GEN', departmentId, {
+                name: title,
+                roleInfo: JSON.stringify(newData),
+                count: newData.students.length
+            });
+
+            if (res.success) {
+                toast.success("저장되었습니다.");
+                router.refresh();
+            } else {
+                toast.error("저장 실패: " + res.error);
+            }
+        } catch (e) {
+            console.error(e);
+            toast.error("오류가 발생했습니다.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const handleAttendanceSave = () => {
         if (departmentId) {
             updateStats(departmentId, { currentAttendance: attendance });
-            alert("출석 인원이 저장되었습니다.");
+            toast.success("출석 인원이 저장되었습니다.");
+            // Optionally save attendance to DB as well effectively if needed, but Context handles ephemeral stats usually.
+            // If we want to persist attendance history, that's a separate feature (MinistryStat). 
+            // For now keeping context sync.
         }
     };
 
@@ -62,6 +99,18 @@ export function MinistryManagement({ title, initialData, departmentId }: Ministr
         secretary: initialData.secretary || ''
     });
 
+    // Update staff form when initialData changes (e.g. after fetch)
+    useEffect(() => {
+        setStaffForm({
+            pastor: initialData.pastor,
+            director: initialData.director,
+            deputy: initialData.deputy,
+            treasurer: initialData.treasurer || '',
+            secretary: initialData.secretary || ''
+        });
+        setData(initialData);
+    }, [initialData]);
+
     // State for Add/Edit Dialog (Teachers/Students)
     const [dialogOpen, setDialogOpen] = useState(false);
     const [dialogMode, setDialogMode] = useState<'add' | 'edit'>('add');
@@ -69,35 +118,45 @@ export function MinistryManagement({ title, initialData, departmentId }: Ministr
     const [currentPerson, setCurrentPerson] = useState<Person>({ id: '', name: '', role: '', phone: '' });
 
     // Staff Save Handler
-    const handleStaffSave = () => {
-        setData(prev => ({ ...prev, ...staffForm }));
+    const handleStaffSave = async () => {
+        const newData = { ...data, ...staffForm };
+        setData(newData);
         setIsEditingStaff(false);
+        await saveDataToDB(newData);
     };
 
     // Person Delete Handler
-    const handleDelete = (group: 'teachers' | 'students', id: string) => {
+    const handleDelete = async (group: 'teachers' | 'students', id: string) => {
         if (!confirm("정말 삭제하시겠습니까?")) return;
-        setData(prev => ({
-            ...prev,
-            [group]: prev[group].filter(p => p.id !== id)
-        }));
+
+        const newData = {
+            ...data,
+            [group]: data[group].filter(p => p.id !== id)
+        };
+        setData(newData);
+        await saveDataToDB(newData);
     };
 
     // Person Save Handler
-    const handlePersonSave = () => {
+    const handlePersonSave = async () => {
+        let newData = { ...data };
+
         if (dialogMode === 'add') {
             const newPerson = { ...currentPerson, id: Math.random().toString(36).substr(2, 9) };
-            setData(prev => ({
-                ...prev,
-                [targetGroup]: [...prev[targetGroup], newPerson]
-            }));
+            newData = {
+                ...newData,
+                [targetGroup]: [...newData[targetGroup], newPerson]
+            };
         } else {
-            setData(prev => ({
-                ...prev,
-                [targetGroup]: prev[targetGroup].map(p => p.id === currentPerson.id ? currentPerson : p)
-            }));
+            newData = {
+                ...newData,
+                [targetGroup]: newData[targetGroup].map(p => p.id === currentPerson.id ? currentPerson : p)
+            };
         }
+
+        setData(newData);
         setDialogOpen(false);
+        await saveDataToDB(newData);
     };
 
     const openDialog = (mode: 'add' | 'edit', group: 'teachers' | 'students', person?: Person) => {
@@ -135,9 +194,12 @@ export function MinistryManagement({ title, initialData, departmentId }: Ministr
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-lg font-semibold">섬기는 분들 (Staff)</CardTitle>
-                    <Button variant="outline" size="sm" onClick={() => setIsEditingStaff(!isEditingStaff)}>
-                        {isEditingStaff ? "취소" : <><Edit className="w-4 h-4 mr-2" /> 수정</>}
-                    </Button>
+                    <div className="flex gap-2">
+                        {isSaving && <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />}
+                        <Button variant="outline" size="sm" onClick={() => setIsEditingStaff(!isEditingStaff)} disabled={isSaving}>
+                            {isEditingStaff ? "취소" : <><Edit className="w-4 h-4 mr-2" /> 수정</>}
+                        </Button>
+                    </div>
                 </CardHeader>
                 <CardContent className="pt-6">
                     {isEditingStaff ? (
@@ -163,7 +225,9 @@ export function MinistryManagement({ title, initialData, departmentId }: Ministr
                                 <Input value={staffForm.secretary} onChange={(e) => setStaffForm({ ...staffForm, secretary: e.target.value })} />
                             </div>
                             <div className="md:col-span-5 flex justify-end">
-                                <Button onClick={handleStaffSave}>저장</Button>
+                                <Button onClick={handleStaffSave} disabled={isSaving}>
+                                    {isSaving ? "저장 중..." : "저장"}
+                                </Button>
                             </div>
                         </div>
                     ) : (
@@ -202,7 +266,7 @@ export function MinistryManagement({ title, initialData, departmentId }: Ministr
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>교사 리스트 ({data.teachers.length}명)</CardTitle>
-                    <Button size="sm" onClick={() => openDialog('add', 'teachers')}><Plus className="w-4 h-4 mr-2" /> 추가</Button>
+                    <Button size="sm" onClick={() => openDialog('add', 'teachers')} disabled={isSaving}><Plus className="w-4 h-4 mr-2" /> 추가</Button>
                 </CardHeader>
                 <CardContent>
                     <Table>
@@ -244,8 +308,10 @@ export function MinistryManagement({ title, initialData, departmentId }: Ministr
             {/* 3. Students Table */}
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle>학생 리스트 ({data.students.length}명)</CardTitle>
-                    <Button size="sm" onClick={() => openDialog('add', 'students')}><Plus className="w-4 h-4 mr-2" /> 추가</Button>
+                    <CardTitle>
+                        {title === "영유아유치부" ? "유아 리스트" : title === "청년부" ? "청년 리스트" : "학생 리스트"} ({data.students.length}명)
+                    </CardTitle>
+                    <Button size="sm" onClick={() => openDialog('add', 'students')} disabled={isSaving}><Plus className="w-4 h-4 mr-2" /> 추가</Button>
                 </CardHeader>
                 <CardContent>
                     <Table>
@@ -319,7 +385,9 @@ export function MinistryManagement({ title, initialData, departmentId }: Ministr
                     </div>
                     <DialogFooter>
                         <Button variant="secondary" onClick={() => setDialogOpen(false)}>취소</Button>
-                        <Button onClick={handlePersonSave}>저장</Button>
+                        <Button onClick={handlePersonSave} disabled={isSaving}>
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "저장"}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

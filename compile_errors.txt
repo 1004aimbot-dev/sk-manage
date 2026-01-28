@@ -1,0 +1,4 @@
+app/(admin)/admin/intro/people/page.tsx(15,32): error TS2322: Type '{ id: string; category: string; role: string; name: string; desc: string | null; imageUrl: string | null; order: number; createdAt: Date; updatedAt: Date; }[]' is not assignable to type 'ServingPerson[]'.
+  Type '{ id: string; category: string; role: string; name: string; desc: string | null; imageUrl: string | null; order: number; createdAt: Date; updatedAt: Date; }' is not assignable to type 'ServingPerson'.
+    Types of property 'category' are incompatible.
+      Type 'string' is not assignable to type 'CategoryType'.
